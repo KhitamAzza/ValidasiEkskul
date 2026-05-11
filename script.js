@@ -66,6 +66,7 @@ async function initAppWithLoading() {
     // Step 3: Setup event listeners
     subtext.textContent = 'Menyiapkan aplikasi...';
     setupEventListeners();
+    initBluetoothScanner();
 
     // Done - hide loading
     overlay.classList.add('hidden');
@@ -89,6 +90,13 @@ function initScanner() {
     fps: 10,
     qrbox: { width: 220, height: 220 },
     aspectRatio: 1.0,
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.AZTEC,
+      Html5QrcodeSupportedFormats.DATA_MATRIX,
+      Html5QrcodeSupportedFormats.PDF_417,
+      Html5QrcodeSupportedFormats.MAXICODE,
+    ],
   };
   scanner.start(
     { facingMode: 'environment' },
@@ -219,7 +227,7 @@ function showStampAnimation(student, onComplete) {
   if (!isAman) {
     photo.classList.add('grayscale');
   }
-  text.textContent = isAman ? 'AMAN' : 'BELUM';
+  text.textContent = isAman ? 'AMAN' : 'TIDAK TUNTAS';
   text.className = 'stamp-text ' + (isAman ? 'aman' : 'belum');
   name.textContent = student.nama;
 
@@ -283,6 +291,29 @@ function showDetailModal(studentId) {
 function generateAssessmentList(student) {
   const items = [];
 
+  // ─── Daily Attendance (columns I-N, indices 8-13) ───
+  const attendanceHeaders = ['Hari 1', 'Hari 2', 'Hari 3', 'Hari 4', 'Hari 5', 'Hari 6'];
+  const attendanceValues = student.attendance || [];
+
+  attendanceHeaders.forEach((header, i) => {
+    const val = attendanceValues[i];
+    const hadir = val === 'H' || val === 'HADIR' || val === true || val === 'TRUE';
+    items.push({
+      label: header,
+      done: hadir,
+      detail: hadir ? 'Hadir' : (val || 'Belum ada data')
+    });
+  });
+
+  // ─── Syarat Khusus ───
+  const syarat = student.syaratKhusus === 'TRUE';
+  items.push({
+    label: 'Syarat Khusus',
+    done: syarat,
+    detail: syarat ? 'Sudah' : 'Belum'
+  });
+
+  // ─── Sisa Denda ───
   const sisaDenda = parseFloat(student.sisaDenda) || 0;
   items.push({
     label: 'Sisa Denda Lunas',
@@ -290,13 +321,7 @@ function generateAssessmentList(student) {
     detail: sisaDenda === 0 ? 'Rp 0' : `Rp ${sisaDenda.toLocaleString('id-ID')}`
   });
 
-  const syarat = student.syaratKhusus === 'TRUE';
-  items.push({
-    label: 'Syarat Khusus Terpenuhi',
-    done: syarat,
-    detail: syarat ? 'Ya' : 'Tidak'
-  });
-
+  // ─── Overall Status ───
   items.push({
     label: 'Status Kelulusan',
     done: student.status === 'AMAN',
@@ -489,6 +514,98 @@ function setupEventListeners() {
       if (student) showStudentModal(student);
     }
   });
+
+// ═══════════════════════════════════════
+// BLUETOOTH BARCODE SCANNER (Keyboard Mode)
+// ═══════════════════════════════════════
+function initBluetoothScanner() {
+  const input = document.getElementById('scannerInput');
+  let scanBuffer = '';
+  let scanTimer = null;
+
+  // Focus hidden input to capture scanner keystrokes
+  // Scanner acts as keyboard - types barcode then Enter
+  document.addEventListener('keydown', (e) => {
+    // Only capture if no other input is focused and no modal open
+    const activeElement = document.activeElement;
+    const isInputFocused = activeElement && (
+      activeElement.tagName === 'INPUT' || 
+      activeElement.tagName === 'TEXTAREA'
+    );
+    const searchOpen = document.getElementById('searchDialog').classList.contains('active');
+
+    if (!isInputFocused && !searchOpen && modalStack.length === 0) {
+      // Focus the hidden input to capture scanner keystrokes
+      input.focus();
+    }
+  });
+
+  // Handle input from scanner
+  input.addEventListener('input', (e) => {
+    clearTimeout(scanTimer);
+    scanBuffer = input.value;
+
+    // Scanner sends Enter key after barcode - detect with timer
+    scanTimer = setTimeout(() => {
+      if (scanBuffer.trim()) {
+        const barcode = scanBuffer.trim();
+        input.value = '';
+        scanBuffer = '';
+
+        // Process barcode same as QR scan
+        if (!isScanning) return;
+        isScanning = false;
+
+        const resultBar = document.getElementById('scannedResult');
+        const resultId = document.getElementById('scannedId');
+        resultId.textContent = barcode;
+        resultBar.classList.add('active');
+
+        const student = findStudent(barcode);
+        if (student) {
+          showStampAnimation(student, () => {
+            showStudentModal(student);
+          });
+          toast('Siswa ditemukan: ' + student.nama);
+        } else {
+          toast('Siswa tidak ditemukan: ' + barcode);
+          setTimeout(resumeScanner, 2000);
+        }
+      }
+    }, 100); // 100ms after last keystroke = end of scan
+  });
+
+  // Also handle Enter key directly
+  input.addEventListener('keydown', (e) => {
+    if (e.code === 'Enter') {
+      clearTimeout(scanTimer);
+      const barcode = input.value.trim();
+      input.value = '';
+      scanBuffer = '';
+
+      if (barcode) {
+        if (!isScanning) return;
+        isScanning = false;
+
+        const resultBar = document.getElementById('scannedResult');
+        const resultId = document.getElementById('scannedId');
+        resultId.textContent = barcode;
+        resultBar.classList.add('active');
+
+        const student = findStudent(barcode);
+        if (student) {
+          showStampAnimation(student, () => {
+            showStudentModal(student);
+          });
+          toast('Siswa ditemukan: ' + student.nama);
+        } else {
+          toast('Siswa tidak ditemukan: ' + barcode);
+          setTimeout(resumeScanner, 2000);
+        }
+      }
+    }
+  });
+}
 
 // ═══════════════════════════════════════
 // UTILITIES
