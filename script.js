@@ -219,7 +219,7 @@ function showStampAnimation(student, onComplete) {
   if (!isAman) {
     photo.classList.add('grayscale');
   }
-  text.textContent = isAman ? 'AMAN' : 'TIDAK TUNTAS';
+  text.textContent = isAman ? 'AMAN' : 'BELUM';
   text.className = 'stamp-text ' + (isAman ? 'aman' : 'belum');
   name.textContent = student.nama;
 
