@@ -437,9 +437,6 @@ function closeSearch(skipResume) {
 
 function performSearch(query) {
   const resultsEl = document.getElementById('searchResults');
-  // Reset keyboard selection
-  window.selectedSearchIndex = -1;
-
   if (!query.trim()) {
     resultsEl.innerHTML = '<div class="loading-state">Ketik untuk mencari siswa...</div>';
     return;
@@ -474,24 +471,6 @@ function performSearch(query) {
       </div>
     `;
   }).join('');
-
-  // Auto-select first result for keyboard navigation
-  window.selectedSearchIndex = 0;
-  const items = resultsEl.querySelectorAll('.search-result-item');
-  updateSearchSelection(items, 0);
-}
-
-// ═══════════════════════════════════════
-// KEYBOARD SEARCH NAVIGATION HELPER
-// ═══════════════════════════════════════
-function updateSearchSelection(items, index) {
-  items.forEach((item, i) => {
-    item.classList.toggle('keyboard-selected', i === index);
-  });
-  // Scroll selected item into view
-  if (items[index]) {
-    items[index].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }
 }
 
 // ═══════════════════════════════════════
@@ -584,94 +563,75 @@ function setupEventListeners() {
 
 // ═══════════════════════════════════════
 // BLUETOOTH BARCODE SCANNER (Keyboard Mode)
+// Same principle as old project - global keystroke capture
 // ═══════════════════════════════════════
-function initBluetoothScanner() {
-  const input = document.getElementById('scannerInput');
-  let scanBuffer = '';
-  let scanTimer = null;
+let barcodeBuffer = "";
+let lastKeyTime = 0;
+const BARCODE_TIMEOUT = 50;  // ms between keystrokes
+const MIN_BARCODE_LENGTH = 5; // minimum chars to be considered a barcode
 
-  // Focus hidden input to capture scanner keystrokes
-  // Scanner acts as keyboard - types barcode then Enter
+function initBluetoothScanner() {
   document.addEventListener('keydown', (e) => {
-    // Only capture if no other input is focused and no modal open
+    // Don't intercept if user is typing in a visible input or modal is open
     const activeElement = document.activeElement;
-    const isInputFocused = activeElement && (
-      activeElement.tagName === 'INPUT' || 
-      activeElement.tagName === 'TEXTAREA'
+    const isRealInputFocused = activeElement && (
+      (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') &&
+      activeElement.id !== 'scannerInput' // ignore our hidden input
     );
     const searchOpen = document.getElementById('searchDialog').classList.contains('active');
+    const anyModalOpen = modalStack.length > 0;
 
-    if (!isInputFocused && !searchOpen && modalStack.length === 0) {
-      // Focus the hidden input to capture scanner keystrokes
-      input.focus();
+    if (isRealInputFocused || searchOpen || anyModalOpen) return;
+
+    const now = Date.now();
+    const timeDiff = now - lastKeyTime;
+    lastKeyTime = now;
+
+    // Reset buffer if too much time passed (not a barcode scan)
+    if (timeDiff > BARCODE_TIMEOUT) {
+      barcodeBuffer = "";
     }
-  });
 
-  // Handle input from scanner
-  input.addEventListener('input', (e) => {
-    clearTimeout(scanTimer);
-    scanBuffer = input.value;
-
-    // Scanner sends Enter key after barcode - detect with timer
-    scanTimer = setTimeout(() => {
-      if (scanBuffer.trim()) {
-        const barcode = scanBuffer.trim();
-        input.value = '';
-        scanBuffer = '';
-
-        // Process barcode same as QR scan
-        if (!isScanning) return;
-        isScanning = false;
-
-        const resultBar = document.getElementById('scannedResult');
-        const resultId = document.getElementById('scannedId');
-        resultId.textContent = barcode;
-        resultBar.classList.add('active');
-
-        const student = findStudent(barcode);
-        if (student) {
-          showStampAnimation(student, () => {
-            showStudentModal(student);
-          });
-          toast('Siswa ditemukan: ' + student.nama);
-        } else {
-          toast('Siswa tidak ditemukan: ' + barcode);
-          setTimeout(resumeScanner, 2000);
-        }
-      }
-    }, 100); // 100ms after last keystroke = end of scan
-  });
-
-  // Also handle Enter key directly
-  input.addEventListener('keydown', (e) => {
-    if (e.code === 'Enter') {
-      clearTimeout(scanTimer);
-      const barcode = input.value.trim();
-      input.value = '';
-      scanBuffer = '';
-
-      if (barcode) {
-        if (!isScanning) return;
-        isScanning = false;
-
-        const resultBar = document.getElementById('scannedResult');
-        const resultId = document.getElementById('scannedId');
-        resultId.textContent = barcode;
-        resultBar.classList.add('active');
-
-        const student = findStudent(barcode);
-        if (student) {
-          showStampAnimation(student, () => {
-            showStudentModal(student);
-          });
-          toast('Siswa ditemukan: ' + student.nama);
-        } else {
-          toast('Siswa tidak ditemukan: ' + barcode);
-          setTimeout(resumeScanner, 2000);
-        }
+    // Accumulate printable characters
+    if (e.key.length === 1) {
+      barcodeBuffer += e.key;
+    }
+    // Enter key = end of barcode scan
+    else if (e.code === 'Enter') {
+      if (barcodeBuffer.length >= MIN_BARCODE_LENGTH) {
+        e.preventDefault(); // Stop Enter from triggering search
+        const barcode = barcodeBuffer.trim();
+        barcodeBuffer = "";
+        handleBarcodeScan(barcode);
+      } else {
+        barcodeBuffer = "";
       }
     }
   });
+}
+
+function handleBarcodeScan(barcode) {
+  console.log('Barcode scanned:', barcode);
+
+  if (!isScanning) return;
+  isScanning = false;
+
+  // Show scanned result bar
+  const resultBar = document.getElementById('scannedResult');
+  const resultId = document.getElementById('scannedId');
+  resultId.textContent = barcode;
+  resultBar.classList.add('active');
+
+  const student = findStudent(barcode);
+  if (student) {
+    showStampAnimation(student, () => {
+      showStudentModal(student);
+    });
+    toast('Siswa ditemukan: ' + student.nama);
+  } else {
+    toast('Siswa tidak ditemukan: ' + barcode);
+    setTimeout(resumeScanner, 2000);
+  }
 }
 
 // ═══════════════════════════════════════
