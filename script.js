@@ -547,37 +547,40 @@ function setupEventListeners() {
   document.getElementById('modalDetailContent').addEventListener('click', (e) => e.stopPropagation());
 
   document.addEventListener('keydown', (e) => {
-    // Enter to open search (desktop only - when no modal/search open and no input focused)
-    if (e.code === 'Enter') {
-      const searchOpen = document.getElementById('searchDialog').classList.contains('active');
-      const activeElement = document.activeElement;
-      const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
-      if (!searchOpen && !isInputFocused && modalStack.length === 0) {
-        e.preventDefault();
-        openSearch();
-        // Auto-focus search input after dialog opens
-        setTimeout(() => document.getElementById('searchInput').focus(), 100);
-      }
+  // Ctrl+Enter to open search (desktop only — when no modal/search open and no input focused)
+  if (e.code === 'Enter' && e.ctrlKey) {
+    const searchOpen = document.getElementById('searchDialog').classList.contains('active');
+    const activeElement = document.activeElement;
+    const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
+    if (!searchOpen && !isInputFocused && modalStack.length === 0) {
+      e.preventDefault();
+      openSearch();
+      // Auto-focus search input after dialog opens
+      setTimeout(() => document.getElementById('searchInput').focus(), 100);
     }
-    if (e.code === 'Space') {
-      const searchOpen = document.getElementById('searchDialog').classList.contains('active');
-      const activeElement = document.activeElement;
-      const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
-      if (!searchOpen && !isInputFocused && modalStack.length > 0) {
-        e.preventDefault();
-        closeTopModal();
-      }
+  }
+  
+  // Space to close top modal (keep as-is)
+  if (e.code === 'Space') {
+    const searchOpen = document.getElementById('searchDialog').classList.contains('active');
+    const activeElement = document.activeElement;
+    const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
+    if (!searchOpen && !isInputFocused && modalStack.length > 0) {
+      e.preventDefault();
+      closeTopModal();
     }
-    if (e.code === 'Escape') {
-      const searchOpen = document.getElementById('searchDialog').classList.contains('active');
-      if (searchOpen) {
-        closeSearch();
-      } else if (modalStack.length > 0) {
-        closeTopModal();
-      }
+  }
+  
+  // Escape to close search or modal (keep as-is)
+  if (e.code === 'Escape') {
+    const searchOpen = document.getElementById('searchDialog').classList.contains('active');
+    if (searchOpen) {
+      closeSearch();
+    } else if (modalStack.length > 0) {
+      closeTopModal();
     }
-  });
-}
+  }
+});
 
 // Click scanned result to reopen modal
   document.getElementById('scannedResult').addEventListener('click', () => {
