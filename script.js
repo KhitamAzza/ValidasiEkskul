@@ -437,6 +437,9 @@ function closeSearch(skipResume) {
 
 function performSearch(query) {
   const resultsEl = document.getElementById('searchResults');
+  // Reset keyboard selection
+  window.selectedSearchIndex = -1;
+
   if (!query.trim()) {
     resultsEl.innerHTML = '<div class="loading-state">Ketik untuk mencari siswa...</div>';
     return;
@@ -471,6 +474,24 @@ function performSearch(query) {
       </div>
     `;
   }).join('');
+
+  // Auto-select first result for keyboard navigation
+  window.selectedSearchIndex = 0;
+  const items = resultsEl.querySelectorAll('.search-result-item');
+  updateSearchSelection(items, 0);
+}
+
+// ═══════════════════════════════════════
+// KEYBOARD SEARCH NAVIGATION HELPER
+// ═══════════════════════════════════════
+function updateSearchSelection(items, index) {
+  items.forEach((item, i) => {
+    item.classList.toggle('keyboard-selected', i === index);
+  });
+  // Scroll selected item into view
+  if (items[index]) {
+    items[index].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
 }
 
 // ═══════════════════════════════════════
@@ -521,14 +542,11 @@ function setupEventListeners() {
 
   document.addEventListener('keydown', (e) => {
     // Enter to open search (desktop only - when no modal/search open and no input focused)
-    // Skip if barcode scanner is actively scanning (hidden input has content)
     if (e.code === 'Enter') {
-      const scannerInput = document.getElementById('scannerInput');
-      const isScanningBarcode = scannerInput && scannerInput.value.trim().length > 0;
       const searchOpen = document.getElementById('searchDialog').classList.contains('active');
       const activeElement = document.activeElement;
       const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
-      if (!isScanningBarcode && !searchOpen && !isInputFocused && modalStack.length === 0) {
+      if (!searchOpen && !isInputFocused && modalStack.length === 0) {
         e.preventDefault();
         openSearch();
         // Auto-focus search input after dialog opens
