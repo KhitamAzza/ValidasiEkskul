@@ -1,18 +1,16 @@
-
 // ═══════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzoz8-2qB1KkGn0iOvGxAX4qnJL9ou7QAJ3i-ZFG5riQbaqgkv3jwNuE7y_pWDEOTfb/exec';
 
 // ═══════════════════════════════════════
-// ═══════════════════════════════════════
 // AUDIO - Custom Sound Effects
 // ═══════════════════════════════════════
 const amanSound = new Audio('AMAN.mp3');
 const belumSound = new Audio('TIDAK_TUNTAS.mp3');
 
-// Preload audio files
-amanSound.load();belumSound.load();
+amanSound.load();
+belumSound.load();
 
 function playSound(status) {
   const sound = status === 'AMAN' ? amanSound : belumSound;
@@ -28,9 +26,10 @@ let photosData = [];
 let scanner = null;
 let isScanning = true;
 let modalStack = [];
+let selectedSearchIndex = -1;
 
 // ═══════════════════════════════════════
-// API: ALL requests go through POST with action in body
+// API
 // ═══════════════════════════════════════
 async function api(action, payload = {}) {
   const res = await fetch(GAS_URL, {
@@ -47,28 +46,21 @@ document.addEventListener('DOMContentLoaded', () => {
   initAppWithLoading();
 });
 
-// ═══════════════════════════════════════
-// INIT APP WITH LOADING
-// ═══════════════════════════════════════
 async function initAppWithLoading() {
   const overlay = document.getElementById('loadingOverlay');
   const subtext = document.getElementById('loadingSubtext');
 
   try {
-    // Step 1: Init scanner (camera)
     subtext.textContent = 'Memulai kamera...';
     initScanner();
 
-    // Step 2: Load data from GAS
     subtext.textContent = 'Mengambil data siswa...';
     await loadData();
 
-    // Step 3: Setup event listeners
     subtext.textContent = 'Menyiapkan aplikasi...';
     setupEventListeners();
     initBluetoothScanner();
 
-    // Done - hide loading
     overlay.classList.add('hidden');
     toast('Aplikasi siap digunakan');
 
@@ -76,7 +68,6 @@ async function initAppWithLoading() {
     console.error('Init error:', e);
     subtext.textContent = 'Error: ' + e.message;
     toast('❌ Error memuat data: ' + e.message);
-    // Still hide loading after delay so user can see error
     setTimeout(() => overlay.classList.add('hidden'), 3000);
   }
 }
@@ -114,7 +105,6 @@ function onScanSuccess(decodedText) {
   isScanning = false;
   const studentId = decodedText.trim();
 
-  // Show scanned result bar
   const resultBar = document.getElementById('scannedResult');
   const resultId = document.getElementById('scannedId');
   resultId.textContent = studentId;
@@ -122,14 +112,12 @@ function onScanSuccess(decodedText) {
 
   const student = findStudent(studentId);
   if (student) {
-    // Show stamp animation first, then modal after 3s
     showStampAnimation(student, () => {
       showStudentModal(student);
     });
     toast('Siswa ditemukan: ' + student.nama);
   } else {
     toast('Siswa tidak ditemukan: ' + studentId);
-    // Resume scanner for invalid scan
     setTimeout(resumeScanner, 2000);
   }
 }
@@ -142,7 +130,7 @@ function resumeScanner() {
   const resultBar = document.getElementById('scannedResult');
   resultBar.classList.remove('active');
   document.getElementById('scannedId').textContent = '';
-  isScanning = true; // Just allow scanning again, camera keeps running
+  isScanning = true;
 }
 
 // ═══════════════════════════════════════
@@ -179,7 +167,6 @@ async function loadData() {
       throw new Error(photosR.error || 'Failed to load photos');
     }
 
-    // Only show toast if NOT during init loading screen
     if (!isInit) {
       toast(`Data dimuat: ${studentsData.length} siswa`);
     }
@@ -226,10 +213,7 @@ function showStampAnimation(student, onComplete) {
   const text = document.getElementById('stampText');
   const name = document.getElementById('stampName');
 
-  // Reset classes
   photo.className = 'stamp-photo';
-
-  // Set content
   photo.src = student.fotoUrl || '';
   photo.onerror = function() {
     this.src = 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👤</text></svg>';
@@ -243,13 +227,9 @@ function showStampAnimation(student, onComplete) {
   text.className = 'stamp-text ' + (isAman ? 'aman' : 'belum');
   name.textContent = student.nama;
 
-  // Play sound
   playSound(student.status);
-
-  // Show overlay
   overlay.classList.add('active');
 
-  // Hide after 3s and call completion
   setTimeout(() => {
     overlay.classList.remove('active');
     if (onComplete) onComplete();
@@ -257,8 +237,6 @@ function showStampAnimation(student, onComplete) {
 }
 
 function showStudentModal(student) {
-  // Sound already played in stamp animation, no need to play again
-
   const modal = document.getElementById('modalInfo');
   const content = document.getElementById('modalInfoContent');
 
@@ -314,7 +292,6 @@ function getAttendanceBadgeClass(val) {
 function generateAssessmentList(student) {
   const items = [];
 
-  // ─── Daily Attendance (columns I-N) ───
   const attendanceHeaders = student.attendanceHeaders || [];
   const attendanceValues = student.attendance || [];
 
@@ -328,12 +305,11 @@ function generateAssessmentList(student) {
     items.push({
       label: `${dateStr}`,
       badge: `<span class="attendance-badge ${badgeClass}">${displayVal}</span>`,
-      done: false, // We use badge colors instead of check icons for attendance
+      done: false,
       detail: ''
     });
   });
 
-  // ─── Syarat Khusus ───
   const syarat = student.syaratKhusus === 'TRUE';
   items.push({
     label: 'Syarat Khusus',
@@ -341,7 +317,6 @@ function generateAssessmentList(student) {
     detail: syarat ? 'Sudah' : 'Belum'
   });
 
-  // ─── Sisa Denda ───
   const sisaDenda = parseFloat(student.sisaDenda) || 0;
   items.push({
     label: 'Sisa Denda Lunas',
@@ -349,7 +324,6 @@ function generateAssessmentList(student) {
     detail: sisaDenda === 0 ? 'Rp 0' : `Rp ${sisaDenda.toLocaleString('id-ID')}`
   });
 
-  // ─── Overall Status ───
   items.push({
     label: 'Status Kelulusan',
     done: student.status === 'AMAN',
@@ -370,21 +344,18 @@ function generateAssessmentList(student) {
   `).join('');
 }
 
-// Helper: format dd/mm/yyyy to Indonesian date "4 April 2026"
 function formatIndonesianDate(dateStr) {
   if (!dateStr) return null;
-  // Parse dd/mm/yyyy
   const parts = dateStr.split('/');
   if (parts.length !== 3) return dateStr;
 
   const day = parseInt(parts[0], 10);
-  const month = parseInt(parts[1], 10) - 1; // JS months are 0-indexed
+  const month = parseInt(parts[1], 10) - 1;
   const year = parseInt(parts[2], 10);
 
   const date = new Date(year, month, day);
   if (isNaN(date.getTime())) return dateStr;
 
-  // Format to Indonesian: "4 April 2026"
   const months = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
@@ -402,7 +373,6 @@ function closeTopModal() {
   if (modalStack.length === 0) return;
   const modal = modalStack.pop();
   modal.classList.remove('active');
-  // Resume scanner when all modals are closed
   if (modalStack.length === 0) {
     resumeScanner();
   }
@@ -422,8 +392,7 @@ function closeAllModals() {
 function openSearch() {
   const dialog = document.getElementById('searchDialog');
   dialog.classList.add('active');
-  isScanning = false; // Just stop processing scans, don't pause camera
-  // Auto-focus search input with small delay for transition
+  isScanning = false;
   setTimeout(() => {
     const input = document.getElementById('searchInput');
     input.focus();
@@ -437,13 +406,12 @@ function closeSearch(skipResume) {
   document.getElementById('searchInput').value = '';
   document.getElementById('searchResults').innerHTML = '<div class="loading-state">Ketik untuk mencari siswa...</div>';
   if (!skipResume) {
-    isScanning = true; // Just allow scanning again, camera keeps running
+    isScanning = true;
   }
 }
 
 function performSearch(query) {
   const resultsEl = document.getElementById('searchResults');
-  // Reset keyboard selection
   selectedSearchIndex = -1;
 
   if (!query.trim()) {
@@ -481,20 +449,15 @@ function performSearch(query) {
     `;
   }).join('');
 
-  // Auto-select first result for keyboard navigation
   selectedSearchIndex = 0;
   const items = resultsEl.querySelectorAll('.search-result-item');
   updateSearchSelection(items, 0);
 }
 
-// ═══════════════════════════════════════
-// KEYBOARD SEARCH NAVIGATION HELPER
-// ═══════════════════════════════════════
 function updateSearchSelection(items, index) {
   items.forEach((item, i) => {
     item.classList.toggle('keyboard-selected', i === index);
   });
-  // Scroll selected item into view
   if (items[index]) {
     items[index].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
@@ -504,6 +467,7 @@ function updateSearchSelection(items, index) {
 // EVENT LISTENERS
 // ═══════════════════════════════════════
 function setupEventListeners() {
+  // Button clicks
   document.getElementById('btnSearch').addEventListener('click', openSearch);
   document.getElementById('btnRefresh').addEventListener('click', loadData);
 
@@ -515,6 +479,7 @@ function setupEventListeners() {
 
   document.getElementById('btnCloseSearch').addEventListener('click', closeSearch);
 
+  // Search input
   const searchInput = document.getElementById('searchInput');
   let searchTimeout;
   searchInput.addEventListener('input', (e) => {
@@ -522,20 +487,21 @@ function setupEventListeners() {
     searchTimeout = setTimeout(() => performSearch(e.target.value), 200);
   });
 
+  // Search results click
   document.getElementById('searchResults').addEventListener('click', (e) => {
     const item = e.target.closest('.search-result-item');
     if (item) {
       const id = item.dataset.id;
       const student = findStudent(id);
       if (student) {
-        closeSearch(true); // skip scanner resume
-        // Play sound only for search (no stamp animation)
+        closeSearch(true);
         playSound(student.status);
         showStudentModal(student);
       }
     }
   });
 
+  // Modal backdrop clicks
   document.getElementById('modalInfo').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeTopModal();
   });
@@ -543,70 +509,70 @@ function setupEventListeners() {
     if (e.target === e.currentTarget) closeTopModal();
   });
 
+  // Prevent modal content clicks from closing
   document.getElementById('modalInfoContent').addEventListener('click', (e) => e.stopPropagation());
   document.getElementById('modalDetailContent').addEventListener('click', (e) => e.stopPropagation());
 
+  // Global keyboard shortcuts
   document.addEventListener('keydown', (e) => {
-  // Ctrl+Enter to open search (desktop only — when no modal/search open and no input focused)
-  if (e.code === 'Enter' && e.ctrlKey) {
-    const searchOpen = document.getElementById('searchDialog').classList.contains('active');
-    const activeElement = document.activeElement;
-    const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
-    if (!searchOpen && !isInputFocused && modalStack.length === 0) {
-      e.preventDefault();
-      openSearch();
-      // Auto-focus search input after dialog opens
-      setTimeout(() => document.getElementById('searchInput').focus(), 100);
+    // Ctrl+Enter: Open search
+    if (e.code === 'Enter' && e.ctrlKey) {
+      const searchOpen = document.getElementById('searchDialog').classList.contains('active');
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
+      if (!searchOpen && !isInputFocused && modalStack.length === 0) {
+        e.preventDefault();
+        openSearch();
+        setTimeout(() => document.getElementById('searchInput').focus(), 100);
+      }
     }
-  }
-  
-  // Space to close top modal (keep as-is)
-  if (e.code === 'Space') {
-    const searchOpen = document.getElementById('searchDialog').classList.contains('active');
-    const activeElement = document.activeElement;
-    const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
-    if (!searchOpen && !isInputFocused && modalStack.length > 0) {
-      e.preventDefault();
-      closeTopModal();
+
+    // Space: Close top modal
+    if (e.code === 'Space') {
+      const searchOpen = document.getElementById('searchDialog').classList.contains('active');
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
+      if (!searchOpen && !isInputFocused && modalStack.length > 0) {
+        e.preventDefault();
+        closeTopModal();
+      }
     }
-  }
-  
-  // Escape to close search or modal (keep as-is)
-  if (e.code === 'Escape') {
-    const searchOpen = document.getElementById('searchDialog').classList.contains('active');
-    if (searchOpen) {
-      closeSearch();
-    } else if (modalStack.length > 0) {
-      closeTopModal();
+
+    // Escape: Close search or modal
+    if (e.code === 'Escape') {
+      const searchOpen = document.getElementById('searchDialog').classList.contains('active');
+      if (searchOpen) {
+        closeSearch();
+      } else if (modalStack.length > 0) {
+        closeTopModal();
+      }
     }
+  });
+}
+
+// Scanned result bar click — reopen modal
+document.getElementById('scannedResult').addEventListener('click', () => {
+  const id = document.getElementById('scannedId').textContent;
+  if (id) {
+    const student = findStudent(id);
+    if (student) showStudentModal(student);
   }
 });
 
-// Click scanned result to reopen modal
-  document.getElementById('scannedResult').addEventListener('click', () => {
-    const id = document.getElementById('scannedId').textContent;
-    if (id) {
-      const student = findStudent(id);
-      if (student) showStudentModal(student);
-    }
-  });
-
 // ═══════════════════════════════════════
-// BLUETOOTH BARCODE SCANNER (Keyboard Mode)
-// Same principle as old project - global keystroke capture
+// BLUETOOTH BARCODE SCANNER
 // ═══════════════════════════════════════
 let barcodeBuffer = "";
 let lastKeyTime = 0;
-const BARCODE_TIMEOUT = 50;  // ms between keystrokes
-const MIN_BARCODE_LENGTH = 5; // minimum chars to be considered a barcode
+const BARCODE_TIMEOUT = 50;
+const MIN_BARCODE_LENGTH = 5;
 
 function initBluetoothScanner() {
   document.addEventListener('keydown', (e) => {
-    // Don't intercept if user is typing in a visible input or modal is open
     const activeElement = document.activeElement;
     const isRealInputFocused = activeElement && (
       (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') &&
-      activeElement.id !== 'scannerInput' // ignore our hidden input
+      activeElement.id !== 'scannerInput'
     );
     const searchOpen = document.getElementById('searchDialog').classList.contains('active');
     const anyModalOpen = modalStack.length > 0;
@@ -617,19 +583,15 @@ function initBluetoothScanner() {
     const timeDiff = now - lastKeyTime;
     lastKeyTime = now;
 
-    // Reset buffer if too much time passed (not a barcode scan)
     if (timeDiff > BARCODE_TIMEOUT) {
       barcodeBuffer = "";
     }
 
-    // Accumulate printable characters
     if (e.key.length === 1) {
       barcodeBuffer += e.key;
-    }
-    // Enter key = end of barcode scan
-    else if (e.code === 'Enter') {
+    } else if (e.code === 'Enter') {
       if (barcodeBuffer.length >= MIN_BARCODE_LENGTH) {
-        e.preventDefault(); // Stop Enter from triggering search
+        e.preventDefault();
         const barcode = barcodeBuffer.trim();
         barcodeBuffer = "";
         handleBarcodeScan(barcode);
@@ -646,7 +608,6 @@ function handleBarcodeScan(barcode) {
   if (!isScanning) return;
   isScanning = false;
 
-  // Show scanned result bar
   const resultBar = document.getElementById('scannedResult');
   const resultId = document.getElementById('scannedId');
   resultId.textContent = barcode;
