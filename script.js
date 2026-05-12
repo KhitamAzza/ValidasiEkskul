@@ -521,11 +521,14 @@ function setupEventListeners() {
 
   document.addEventListener('keydown', (e) => {
     // Enter to open search (desktop only - when no modal/search open and no input focused)
+    // Skip if barcode scanner is actively scanning (hidden input has content)
     if (e.code === 'Enter') {
+      const scannerInput = document.getElementById('scannerInput');
+      const isScanningBarcode = scannerInput && scannerInput.value.trim().length > 0;
       const searchOpen = document.getElementById('searchDialog').classList.contains('active');
       const activeElement = document.activeElement;
       const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
-      if (!searchOpen && !isInputFocused && modalStack.length === 0) {
+      if (!isScanningBarcode && !searchOpen && !isInputFocused && modalStack.length === 0) {
         e.preventDefault();
         openSearch();
         // Auto-focus search input after dialog opens
